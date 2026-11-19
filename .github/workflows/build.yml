@@ -1,0 +1,57 @@
+name: Build APK
+
+# GitHub에 코드를 올리면 APK를 자동으로 만들어 줍니다.
+# 결과는 페이지 하단 Artifacts의 "couple-ledger-apk" 에서 내려받을 수 있어요.
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Create Android project files
+        run: flutter create . --org com.example --project-name couple_ledger
+
+      - name: Set Android compileSdk to 37 (newer androidx.core needs it)
+        run: |
+          F=android/app/build.gradle
+          [ -f "$F" ] || F=android/app/build.gradle.kts
+          sed -i.bak -E 's/compileSdk ?= ?flutter\.compileSdkVersion/compileSdk = 37/' "$F"
+          grep -n "compileSdk" "$F" || true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Enable core library desugaring (flutter_local_notifications needs it)
+        run: |
+          F=android/app/build.gradle
+          [ -f "$F" ] || F=android/app/build.gradle.kts
+          perl -0pi -e 's/(defaultConfig \{\n)/$1    isCoreLibraryDesugaringEnabled = true\n/' "$F"
+          if grep -q "^dependencies {" "$F"; then
+            perl -0pi -e 's/^dependencies \{\n/dependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")\n/' "$F"
+          else
+            printf '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")\n}\n' >> "$F"
+          fi
+          grep -n "esugaring" "$F" || true
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: couple-ledger-apk
+          path: build/app/outputs/flutter-apk/app-release.apk

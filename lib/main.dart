@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
@@ -10,6 +11,8 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 한글 날짜 포맷('ko') 초기화 — 이게 없으면 날짜 표시 화면에서 오류 발생
+  await initializeDateFormatting('ko', null);
   await Prefs.init();
   await _initFirebase();
   runApp(const BootApp());

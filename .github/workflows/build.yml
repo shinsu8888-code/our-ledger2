@@ -19,34 +19,40 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Flutter 버전을 고정해서 앞으로도 같은 환경에서 빌드되게 함
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.50.0
 
       - name: Create Android project files
         run: flutter create . --org com.example --project-name couple_ledger
 
-      - name: Set Android compileSdk to 37 (newer androidx.core needs it)
+      - name: Patch Android build config (compileSdk 37 + desugaring)
         run: |
-          F=android/app/build.gradle
-          [ -f "$F" ] || F=android/app/build.gradle.kts
-          sed -i.bak -E 's/compileSdk ?= ?flutter\.compileSdkVersion/compileSdk = 37/' "$F"
-          grep -n "compileSdk" "$F" || true
+          F=android/app/build.gradle.kts
+          [ -f "$F" ] || F=android/app/build.gradle
+
+          # 1) compileSdk 를 36 → 37 로 (최신 androidx.core 요구사항)
+          if ! grep -q "compileSdk = 37" "$F"; then
+            sed -i.bak -E 's/compileSdk ?= ?flutter\.compileSdkVersion/compileSdk = 37/' "$F"
+          fi
+
+          # 2) desugaring 켜기 — 반드시 compileOptions 블록 "안"에
+          if ! grep -q "isCoreLibraryDesugaringEnabled" "$F"; then
+            perl -0pi -e 's/compileOptions \{\n/compileOptions {\n        isCoreLibraryDesugaringEnabled = true\n/' "$F"
+          fi
+
+          # 3) desugar 라이브러리 의존성 추가
+          if ! grep -q "coreLibraryDesugaring(" "$F"; then
+            printf '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")\n}\n' >> "$F"
+          fi
+
+          echo "--- patched result ---"
+          grep -n "compileSdk\|Desugaring\|desugar" "$F" || true
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Enable core library desugaring (flutter_local_notifications needs it)
-        run: |
-          F=android/app/build.gradle
-          [ -f "$F" ] || F=android/app/build.gradle.kts
-          perl -0pi -e 's/(defaultConfig \{\n)/$1    isCoreLibraryDesugaringEnabled = true\n/' "$F"
-          if grep -q "^dependencies {" "$F"; then
-            perl -0pi -e 's/^dependencies \{\n/dependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")\n/' "$F"
-          else
-            printf '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")\n}\n' >> "$F"
-          fi
-          grep -n "esugaring" "$F" || true
 
       - name: Build APK
         run: flutter build apk --release

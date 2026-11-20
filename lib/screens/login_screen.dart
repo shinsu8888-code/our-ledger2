@@ -16,6 +16,11 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
 
   Future<void> _submit() async {
+    // 빈 값으로 API를 호출하지 않도록 먼저 확인
+    if (_email.text.trim().isEmpty || _password.text.isEmpty) {
+      setState(() => _error = '이메일과 비밀번호를 모두 입력해 주세요.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -42,7 +47,8 @@ class _LoginScreenState extends State<LoginScreen> {
           'invalid-credential' || 'wrong-password' || 'user-not-found' =>
             '이메일 또는 비밀번호가 올바르지 않아요.',
           'invalid-login-credentials' => '이메일 또는 비밀번호가 올바르지 않아요.',
-          _ => '오류: ${e.code}',
+          // Firebase 원인까지 보이게: 코드 + 상세 메시지
+          _ => '오류: ${e.code}${e.message == null ? '' : '\n(${e.message})'}',
         };
       });
     } catch (e) {
